@@ -299,13 +299,34 @@ def open_repo(p: Profile, create: bool) -> restic.Repo | None:
         return None
     pw = new_password()
     repo = restic.Repo(url, pw, extra_args=args)
-    try:
-        asyncio.run(restic.init(repo))
-    except restic.ResticError as e:
-        ui.error(f"No se pudo crear: {e}")
-        return None
+    while True:
+        try:
+            asyncio.run(restic.init(repo))
+            break
+        except restic.ResticError as e:
+            ui.error(f"No se pudo crear: {e}")
+            if not ("permission denied" in str(e).lower() and fix_permissions(p)):
+                return None
     ui.ok("Repositorio creado")
     return repo
+
+
+def fix_permissions(p: Profile) -> bool:
+    """Ofrece crear la carpeta del repositorio con sudo y ponerla a nombre del usuario."""
+    fix = remote.ownership_fix(p)
+    if not fix:
+        return False
+    shown, cmds = fix
+    ui.warn("Tu usuario no puede escribir en esa carpeta. Puedo crearla con sudo y "
+            "ponerla a tu nombre; restic seguirá funcionando sin sudo.")
+    ui.info(shown)
+    if not ui.confirm("¿Lo hago? (pedirá la contraseña de sudo)", default=True, back=False):
+        return False
+    if remote.run_ownership_fix(cmds):
+        ui.ok("Carpeta lista. Vuelvo a crear el repositorio...")
+        return True
+    ui.error("No se pudo (¿contraseña de sudo incorrecta o sin permisos de sudo?)")
+    return False
 
 
 def new_password() -> str:

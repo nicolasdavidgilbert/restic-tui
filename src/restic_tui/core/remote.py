@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import getpass
+import os
 import re
+import shlex
 import subprocess
 import urllib.error
 import urllib.request
@@ -138,6 +141,32 @@ def setup_ssh_interactive(user: str, host: str, port: int) -> int:
     print(f"Copiando {pub} a {user}@{host}:{port} (te pedirá su contraseña una vez)…")
     return subprocess.call(["ssh-copy-id", "-i", str(pub), "-o", "IdentitiesOnly=yes",
                             "-p", str(port), f"{user}@{host}"])
+
+
+def ownership_fix(p: Profile) -> tuple[str, list[list[str]]] | None:
+    """Comandos para crear con sudo la carpeta del repositorio y dársela al usuario.
+
+    Devuelve (texto para mostrar, comandos) o None si no aplica (rest-server).
+    restic se sigue ejecutando como el usuario normal: solo la carpeta pasa a ser suya.
+    """
+    if p.dest_type == "local" and p.local_path:
+        path, user = p.local_path, getpass.getuser()
+        cmds = [["sudo", "mkdir", "-p", "--", path],
+                ["sudo", "chown", f"{os.getuid()}:{os.getgid()}", "--", path]]
+        return f"sudo mkdir -p {shlex.quote(path)} && sudo chown {user}: {shlex.quote(path)}", cmds
+    if p.dest_type == "sftp" and p.sftp_path:
+        validate_ssh(p.sftp_user, p.sftp_host, p.sftp_port)
+        path = shlex.quote(p.sftp_path)
+        remote_cmd = f"sudo mkdir -p -- {path} && sudo chown {p.sftp_user}: -- {path}"
+        cmds = [["ssh", "-t", *ssh_opts(), "-p", str(p.sftp_port),
+                 f"{p.sftp_user}@{p.sftp_host}", remote_cmd]]
+        return f"en {p.sftp_host}: {remote_cmd}", cmds
+    return None
+
+
+def run_ownership_fix(cmds: list[list[str]]) -> bool:
+    """Interactivo: sudo pide la contraseña en la propia terminal."""
+    return all(subprocess.call(c) == 0 for c in cmds)
 
 
 def _rest_check(url: str, user: str, password: str) -> tuple[bool, str]:

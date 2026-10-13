@@ -266,8 +266,11 @@ si usas mDNS/Avahi.
 
 **"El equipo no acepta conexiones SSH"**: el equipo está apagado o no tiene `openssh-server`.
 
-**`permission denied` al crear el repositorio en el otro equipo**: tu usuario no puede
-escribir en esa carpeta. Ejecuta allí `sudo chown usuario: /ruta/de/la/carpeta`.
+**`permission denied` al crear el repositorio** (por ejemplo en `/srv/...`, que es de
+root): el asistente ofrece arreglarlo con sudo. Te enseña el comando y te pide la contraseña
+de sudo, en local o en el otro equipo por SSH. Crea la carpeta y la pone a tu nombre;
+restic sigue funcionando sin sudo, así que el repositorio no queda a nombre de root. A mano
+sería `sudo mkdir -p /ruta && sudo chown usuario: /ruta`.
 
 **"El repositorio está bloqueado"**: suele quedar así si un backup se cortó de golpe. Si no
 hay otro backup en marcha, el asistente ofrece quitar los bloqueos antiguos (`restic unlock`).

@@ -132,3 +132,17 @@ def test_ssh_errors_are_explained():
         "kex_exchange_identification: read: Connection reset by peer", 255)
     assert "fail2ban" in msg
     assert "configurar acceso SSH" in remote._explain_ssh_error("Permission denied", 255)
+
+
+def test_ownership_fix_commands(monkeypatch):
+    monkeypatch.setattr(remote.getpass, "getuser", lambda: "nico")
+    shown, cmds = remote.ownership_fix(Profile(local_path="/srv/backups/T7"))
+    assert cmds[0] == ["sudo", "mkdir", "-p", "--", "/srv/backups/T7"]
+    assert cmds[1][:2] == ["sudo", "chown"] and cmds[1][-1] == "/srv/backups/T7"
+    assert "sudo chown nico:" in shown
+    p = Profile(dest_type="sftp", sftp_user="nico", sftp_host="nas",
+                sftp_path="/srv/r; rm -rf ~")
+    _, [cmd] = remote.ownership_fix(p)
+    assert cmd[0:2] == ["ssh", "-t"] and cmd[-2] == "nico@nas"
+    assert "'/srv/r; rm -rf ~'" in cmd[-1]  # la ruta va entrecomillada para el shell remoto
+    assert remote.ownership_fix(Profile(dest_type="rest", rest_url="http://h/x")) is None
